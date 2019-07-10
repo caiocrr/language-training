@@ -5,22 +5,63 @@ const Diff = require("diff");
 
 class App extends Component {
   state = {
-    text: "",
-    textPointer: 0
+    pointer: 0,
+    spans: []
   };
   componentWillReceiveProps() {
     const { transcript } = this.props;
-    console.log(transcript);
+  }
+
+  processWord = transcript => {
+    const { pointer, spans } = this.state;
+    if (pointer >= spans.length) return;
+    const expectedTranscript = spans
+      .slice(pointer, spans.length)
+      .map(x => x[0]);
+    transcript = transcript.split([" "]).filter(x => x !== "");
+
+    let qtdWords = Math.min(expectedTranscript.length, transcript.length);
+
+    let newPointer = pointer;
+    console.log(pointer, qtdWords);
+    for (var i = 0; i < qtdWords; i++) {
+      console.log(
+        expectedTranscript[i],
+        transcript[i],
+        expectedTranscript[i].toUpperCase() === transcript[i].toUpperCase()
+      );
+      if (expectedTranscript[i].toUpperCase() === transcript[i].toUpperCase()) {
+        newPointer++;
+      } else {
+        break;
+      }
+    }
+    this.setState({ pointer: newPointer }, this.paintWords);
+  };
+
+  paintWords() {
+    const { spans, pointer } = this.state;
+    let newSpans = [...spans];
+    for (let i = 0; i < pointer; i++) {
+      newSpans[i][1] = (
+        <span key={newSpans[i][0]} style={{ color: "green" }}>
+          {newSpans[i][0]}
+        </span>
+      );
+    }
+
+    this.setState({ spans: newSpans });
   }
   componentDidMount() {
     this.props.recognition.lang = "en-US";
-    // this.props.recognition.onresult = event => {
-    //   console.log(event);
-    //   for (let i = event.resultIndex; i < event.results.length; i++) {
-    //     const res = event.results[i][0];
-    //     console.log(res);
-    //   }
-    // };
+    this.props.recognition.onresult = event => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) {
+          this.processWord(res[0].transcript);
+        }
+      }
+    };
     const SpeechGrammarList =
       window.SpeechGrammarList ||
       window.webkitSpeechGrammarList ||
@@ -32,7 +73,17 @@ class App extends Component {
     this.props.recognition.grammars = speechRecognitionList;
   }
   setText = e => {
-    this.setState({ text: e.target.value });
+    let spans = e.target.value.split(" ").reduce((x, y) => {
+      x.push([
+        y,
+        <span key={y} style={{ color: "black" }}>
+          {y}
+        </span>
+      ]);
+      return x;
+    }, []);
+
+    this.setState({ spans });
   };
   toggleTranscript = () => {
     const {
@@ -41,13 +92,12 @@ class App extends Component {
       stopListening,
       resetTranscript
     } = this.props;
-    console.log(this.props);
     resetTranscript();
     return listening ? stopListening() : startListening();
   };
 
   render() {
-    const { text } = this.state;
+    const { spans } = this.state;
     const {
       transcript,
       listening,
@@ -57,16 +107,6 @@ class App extends Component {
     if (!browserSupportsSpeechRecognition) {
       return null;
     }
-    let result = Diff.diffWords(text, transcript, { ignoreCase: true }).map(
-      y => {
-        console.log(y);
-        let className = "correct";
-        if (y.removed) className = "removed";
-        if (y.added) className = "added";
-        return <span className={className}>{y.value}</span>;
-      }
-    );
-    console.log(result);
     return (
       <div className="m-5">
         <Form>
@@ -78,7 +118,9 @@ class App extends Component {
           {listening ? "Stop it!" : "Let's train!"}
         </Button>
 
-        <div className="m-3">{result}</div>
+        <div className="m-3">
+          {spans.map(x => x[1]).reduce((x, y) => [x, " ", y], [])}
+        </div>
       </div>
     );
   }
